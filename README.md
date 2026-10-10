@@ -81,7 +81,7 @@ npm.cmd run dev
 
 Open [http://localhost:3000](http://localhost:3000). Keep both terminal processes running. Use **Ctrl+C** in each terminal to stop its server. In PowerShell, use `npm.cmd` if script execution is disabled by your execution policy.
 
-On the Study Plan page, choose **Add meeting**, select a supported audio file (up to 25 MB), and submit it. The recording is sent to the Google Gemini API for transcription and analysis. ReCap saves the resulting transcript/summary and extracted dates, then removes the temporary local and Gemini audio files. Review the summary, then choose **Generate study plan** when ready.
+On the Study Plan page, choose **Add meeting**, select an MP3, WAV, M4A, OGG, or FLAC audio file (up to 25 MB), and submit it. Hive Speech-to-Text transcribes the recording and DeepSeek analyzes the transcript. ReCap saves the resulting transcript/summary and extracted dates, then removes the temporary audio file. Review the summary, then choose **Generate study plan** when ready.
 
 On Alerts, choose **Connect Gmail** and approve read-only access. Press **Sync Gmail** whenever you want to check for new messages. Alerts only use details found in synced emails or saved meeting notes; ambiguous dates are not invented.
 
@@ -93,11 +93,11 @@ The backend can be deployed as a separate Railway service from the `backend` dir
 
 1. Deploy the contents of `backend/` as the service root.
 2. Add a Railway persistent volume mounted at `/data`, then set `STUDYSYNC_DB_PATH=/data/studysync.sqlite3` so SQLite data survives redeploys.
-3. Set private service variables: `APP_SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GMAIL_SEARCH_QUERY` (optional Gmail search terms/operators), `GOOGLE_OAUTH_CLIENT_SECRETS_JSON`, `GOOGLE_OAUTH_REDIRECT_URI`, `FRONTEND_URL`, and `STUDYSYNC_DB_PATH`.
+3. Set private service variables: `APP_SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `HIVE_SPEECH_API_KEY`, `HIVE_LLM_API_KEY`, `HIVE_DEEPSEEK_MODEL=deepseek-ai/deepseek-v4.1-flash`, `GMAIL_SEARCH_QUERY` (optional Gmail search terms/operators), `GOOGLE_OAUTH_CLIENT_SECRETS_JSON`, `GOOGLE_OAUTH_REDIRECT_URI`, `FRONTEND_URL`, and `STUDYSYNC_DB_PATH`.
 4. Set `GOOGLE_OAUTH_REDIRECT_URI` to `https://<railway-domain>/auth/google/callback` and add that exact URL to the Google OAuth client's authorized redirect URIs. Set `FRONTEND_URL` to the deployed frontend URL.
 5. Keep OAuth JSON and all keys in Railway's private variables; do not commit them or expose them as `NEXT_PUBLIC_*` variables.
 
-Meeting recordings are temporary and deleted after analysis. Audio analysis and Gmail extraction both use the configured Gemini API model and count against its API quota. Gmail sync checks up to 100 messages from the configured lookback period (30 days by default). Set optional Railway variable `GMAIL_SEARCH_QUERY` to Gmail search terms/operators to narrow which matching messages ReCap analyzes, for example `{quiz exam assignment deadline project "room change"}`. ReCap adds the configured lookback filter automatically. This single-user deployment setup does not provide separate accounts or isolate data between multiple students.
+Meeting recordings are temporary and deleted after analysis. Audio uploads are transcribed by Hive Speech-to-Text, then summarized and analyzed for key points, action items, and dates by Hive DeepSeek. Set `HIVE_SPEECH_API_KEY` to a Hive project key with Speech-to-Text enabled, and `HIVE_LLM_API_KEY` to a Hive V3 Service API Key for DeepSeek. Keep both keys private on Railway; do not use `NEXT_PUBLIC_*` variables. Gemini remains configured for Gmail message analysis. Gmail sync checks up to 100 messages from the configured lookback period (30 days by default). Set optional Railway variable `GMAIL_SEARCH_QUERY` to Gmail search terms/operators to narrow which matching messages ReCap analyzes, for example `{quiz exam assignment deadline project "room change"}`. ReCap adds the configured lookback filter automatically. This single-user deployment setup does not provide separate accounts or isolate data between multiple students.
 
 For the Vercel frontend, set these project environment variables to the Railway public service URL (without a trailing slash), then redeploy:
 
@@ -113,7 +113,7 @@ NEXT_PUBLIC_BACKEND_URL=https://<railway-domain>
 - Backend environment variables: `backend/.env` (copy from `.env.example`).
 - Google OAuth client JSON: local `backend/credentials.json`, or the private `GOOGLE_OAUTH_CLIENT_SECRETS_JSON` environment variable on a hosted backend.
 - Local SQLite database: `backend/data/studysync.sqlite3`.
-- The backend listens on `http://localhost:8000`; Next.js proxies `/api/*` there.
+- The backend listens on `http://localhost:8000`; Next.js proxies `/api/*` there. Audio summarization requires `HIVE_SPEECH_API_KEY` and `HIVE_LLM_API_KEY` in the backend environment.
 - To use a different local frontend URL, update `FRONTEND_URL` and the Google OAuth redirect configuration as appropriate.
 - Disconnecting/revoking Gmail access can be done from your Google Account security settings. Token storage is encrypted using `TOKEN_ENCRYPTION_KEY`; changing that key requires reconnecting Gmail.
 

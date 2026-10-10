@@ -6,7 +6,8 @@ from flask import Blueprint, jsonify, request
 
 from .. import db as store
 from ..integrations.errors import ProviderError
-from ..integrations.gemini import ALLOWED_AUDIO, analyze_audio, analyze_text
+from ..integrations.gemini import analyze_text
+from ..integrations.hive import ALLOWED_AUDIO, analyze_audio
 from ..services.domain import create_note
 
 

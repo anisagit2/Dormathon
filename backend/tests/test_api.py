@@ -12,6 +12,7 @@ from google.genai.errors import APIError
 
 from studysync import db as store
 from studysync.integrations.gmail import read_messages
+from studysync.integrations.hive import analyze_transcript, transcribe_audio
 
 TEST_DATA = tempfile.TemporaryDirectory(prefix="studysync-tests-")
 os.environ["STUDYSYNC_DB_PATH"] = str(Path(TEST_DATA.name) / "test.sqlite3")
@@ -55,6 +56,62 @@ class StudySyncApiTests(unittest.TestCase):
         with self.assertRaisesRegex(ProviderError, "usage quota is exhausted"):
             _generate_json(client, "prompt", "email extraction")
 
+    def test_hive_transcribes_audio_with_project_api(self):
+        response = MagicMock(ok=True)
+        response.json.return_value = {
+            "status": {
+                "response": {
+                    "output": [{"transcript": "The biology project is due Friday."}],
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ, {"HIVE_SPEECH_API_KEY": "test-speech-key"}
+        ), patch("studysync.integrations.hive.requests.post", return_value=response) as post:
+            audio_path = Path(temp_dir) / "recording.wav"
+            audio_path.write_bytes(b"audio bytes")
+            transcript = transcribe_audio(str(audio_path))
+
+        self.assertEqual(transcript, "The biology project is due Friday.")
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "token test-speech-key")
+        self.assertIn("media", post.call_args.kwargs["files"])
+        self.assertEqual(post.call_args.kwargs["timeout"], (15, 240))
+
+    def test_hive_deepseek_parses_streamed_json_and_preserves_transcript(self):
+        transcript = "Lecture transcript with a project deadline on October 20."
+        result = {
+            "summary": "The project is due October 20.",
+            "key_points": ["Project deadline: October 20."],
+            "topics": ["Project"],
+            "action_items": ["Submit the project."],
+            "items": [],
+        }
+        response = MagicMock(ok=True)
+        response.__enter__.return_value = response
+        response.iter_lines.return_value = [
+            f'data: {json.dumps({"choices": [{"delta": {"content": json.dumps(result)}}]})}'.encode(),
+            b"data: [DONE]",
+        ]
+        with patch.dict(os.environ, {"HIVE_LLM_API_KEY": "test-llm-key"}), patch(
+            "studysync.integrations.hive.requests.post", return_value=response
+        ) as post:
+            analysis = analyze_transcript(transcript, "Biology class")
+
+        self.assertEqual(analysis["summary"], result["summary"])
+        self.assertEqual(analysis["transcript"], transcript)
+        self.assertEqual(
+            post.call_args.kwargs["json"]["model"],
+            "deepseek-ai/deepseek-v4.1-flash",
+        )
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer test-llm-key")
+
+    def test_hive_audio_providers_require_separate_private_keys(self):
+        with patch.dict(os.environ, {"HIVE_SPEECH_API_KEY": "", "HIVE_LLM_API_KEY": ""}):
+            with self.assertRaisesRegex(ProviderError, "HIVE_SPEECH_API_KEY"):
+                transcribe_audio("recording.wav")
+            with self.assertRaisesRegex(ProviderError, "HIVE_LLM_API_KEY"):
+                analyze_transcript("transcript", "Lecture")
+
     def test_audio_upload_saves_summary_and_deletes_temporary_audio(self):
         seen_paths = []
 
@@ -91,13 +148,13 @@ class StudySyncApiTests(unittest.TestCase):
         self.assertEqual(response.json["extracted_items"][0]["date"], "2099-01-10")
         self.assertEqual(len(self.client.get("/api/alerts").json["alerts"]), 1)
 
-    def test_audio_is_deleted_when_ai_processing_fails(self):
+    def test_audio_is_deleted_when_hive_processing_fails(self):
         seen_paths = []
 
         def fail(path, title):
             seen_paths.append(path)
             self.assertTrue(os.path.isfile(path))
-            raise ProviderError("Gemini request failed.")
+            raise ProviderError("Hive processing failed.")
 
         with patch("studysync.routes.notes.analyze_audio", side_effect=fail):
             response = self.client.post(
@@ -106,14 +163,14 @@ class StudySyncApiTests(unittest.TestCase):
                 content_type="multipart/form-data",
             )
         self.assertEqual(response.status_code, 503)
-        self.assertIn("Gemini request failed", response.json["error"])
+        self.assertIn("Hive processing failed", response.json["error"])
         self.assertFalse(os.path.exists(seen_paths[0]))
 
-    def test_audio_upload_reports_gemini_quota_exhaustion(self):
+    def test_audio_upload_reports_provider_quota_exhaustion(self):
         with patch(
             "studysync.routes.notes.analyze_audio",
             side_effect=ProviderError(
-                "Gemini's usage quota is exhausted for the configured model."
+                "Hive usage quota is exhausted for the configured model."
             ),
         ):
             response = self.client.post(
