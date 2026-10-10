@@ -24,7 +24,21 @@ async function apiFetch<T>(path: string, options?: RequestInit, base = BASE): Pr
   })
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
-    throw new Error(`API ${res.status}: ${text}`)
+    let message = text
+    try {
+      const payload: unknown = JSON.parse(text)
+      if (
+        payload &&
+        typeof payload === 'object' &&
+        'error' in payload &&
+        typeof payload.error === 'string'
+      ) {
+        message = payload.error
+      }
+    } catch {
+      // Keep the raw response text for non-JSON errors.
+    }
+    throw new Error(message || `Request failed (${res.status}).`)
   }
   return res.json() as Promise<T>
 }

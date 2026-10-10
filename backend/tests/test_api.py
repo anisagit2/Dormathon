@@ -21,7 +21,7 @@ os.environ["STUDYSYNC_DB_PATH"] = str(Path(TEST_DATA.name) / "test.sqlite3")
 os.environ["TOKEN_ENCRYPTION_KEY"] = Fernet.generate_key().decode("ascii")
 
 from studysync.app import create_app
-from studysync.integrations.errors import ProviderError
+from studysync.integrations.errors import EmptyTranscriptionError, ProviderError
 
 
 class StudySyncApiTests(unittest.TestCase):
@@ -77,6 +77,17 @@ class StudySyncApiTests(unittest.TestCase):
         call_kwargs = client.audio.transcriptions.create.call_args.kwargs
         self.assertEqual(call_kwargs["model"], "gpt-4o-mini-transcribe")
         self.assertTrue(call_kwargs["file"].closed)
+
+    def test_openai_empty_transcription_is_reported_as_untranscribable_audio(self):
+        client = MagicMock()
+        client.audio.transcriptions.create.return_value.text = "  "
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ, {"OPENAI_API_KEY": "test-openai-key"}
+        ), patch("studysync.integrations.openai_audio.OpenAI", return_value=client):
+            audio_path = Path(temp_dir) / "silent.wav"
+            audio_path.write_bytes(b"audio bytes")
+            with self.assertRaisesRegex(EmptyTranscriptionError, "audible speech"):
+                transcribe_audio(str(audio_path))
 
     def test_hive_deepseek_parses_streamed_json_and_preserves_transcript(self):
         transcript = "Lecture transcript with a project deadline on October 20."
@@ -195,6 +206,21 @@ class StudySyncApiTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 503)
         self.assertIn("usage quota is exhausted", response.json["error"])
+
+    def test_audio_upload_reports_empty_transcript_as_bad_audio_input(self):
+        with patch(
+            "studysync.routes.notes.analyze_audio",
+            side_effect=EmptyTranscriptionError(
+                "No transcript text was returned. Make sure the recording contains audible speech."
+            ),
+        ):
+            response = self.client.post(
+                "/api/notes/audio",
+                data={"title": "Lecture", "audio": (BytesIO(b"recording"), "lecture.wav")},
+                content_type="multipart/form-data",
+            )
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("audible speech", response.json["error"])
 
     def test_audio_upload_rejects_unsupported_file_types(self):
         response = self.client.post(

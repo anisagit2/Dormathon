@@ -5,7 +5,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request
 
 from .. import db as store
-from ..integrations.errors import ProviderError
+from ..integrations.errors import EmptyTranscriptionError, ProviderError
 from ..integrations.audio import ALLOWED_AUDIO, analyze_audio
 from ..integrations.gemini import analyze_text
 from ..services.domain import create_note
@@ -73,6 +73,8 @@ def create_audio_note():
         analysis = analyze_audio(temp_path, title)
         with store.connect() as db:
             result = create_note(db, title, analysis)
+    except EmptyTranscriptionError as error:
+        return jsonify({"error": str(error)}), 422
     except ProviderError as error:
         return jsonify({"error": str(error)}), 503
     finally:

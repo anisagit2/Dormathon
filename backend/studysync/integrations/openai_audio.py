@@ -3,7 +3,7 @@ import os
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
-from .errors import ProviderError
+from .errors import EmptyTranscriptionError, ProviderError
 
 
 logger = logging.getLogger("studysync.integrations.openai_audio")
@@ -41,5 +41,9 @@ def transcribe_audio(path):
 
     transcript = getattr(result, "text", "")
     if not isinstance(transcript, str) or not transcript.strip():
-        raise ProviderError("OpenAI returned an empty transcript. Check the audio and try again.")
+        logger.warning("OpenAI returned an empty transcript for an uploaded recording")
+        raise EmptyTranscriptionError(
+            "No transcript text was returned. Make sure the recording contains audible speech "
+            "and, for MP4 files, an audio track. Try a supported audio file with clear speech."
+        )
     return transcript.strip()
