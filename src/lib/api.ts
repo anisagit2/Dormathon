@@ -1,5 +1,5 @@
 // ─── Centralised API client ───────────────────────────────────────────────────
-// All calls proxy through Next.js → Flask :8000  (next.config.ts rewrite)
+// API calls use the Next.js proxy except audio uploads, which go directly to Flask.
 
 import type {
   AppState, SyncResult, IntegrationStatus,
@@ -10,10 +10,13 @@ import type {
 } from '@/types'
 
 const BASE = '/api'
+const PUBLIC_BACKEND_URL = (
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'
+).replace(/\/+$/, '')
 
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+async function apiFetch<T>(path: string, options?: RequestInit, base = BASE): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${base}${path}`, {
     headers: isFormData
       ? options?.headers
       : { 'Content-Type': 'application/json', ...options?.headers },
@@ -48,7 +51,7 @@ export const api = {
   createNote: (data: { title: string; content: string }) =>
     apiFetch<Note>('/notes', { method: 'POST', body: JSON.stringify(data) }),
   uploadMeeting: (data: FormData) =>
-    apiFetch<Note>('/notes/audio', { method: 'POST', body: data }),
+    apiFetch<Note>('/api/notes/audio', { method: 'POST', body: data }, PUBLIC_BACKEND_URL),
   deleteNote: (id: string) =>
     apiFetch<{ ok: boolean }>(`/notes/${id}`, { method: 'DELETE' }),
 
@@ -94,7 +97,7 @@ export const api = {
   // Alerts
   gmailStatus: () => apiFetch<GmailStatus>('/gmail/status'),
   gmailAuthUrl: () =>
-    `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/auth/google/start`,
+    `${PUBLIC_BACKEND_URL}/auth/google/start`,
   alerts: (unread_only = false) =>
     apiFetch<{ alerts: Alert[] }>(`/alerts${unread_only ? '?unread=1' : ''}`),
   markAlertsRead: (ids?: string[]) =>

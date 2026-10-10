@@ -5,7 +5,7 @@ import unittest
 from datetime import date, timedelta
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from cryptography.fernet import Fernet
 
@@ -21,7 +21,11 @@ from studysync.integrations.errors import ProviderError
 
 class StudySyncApiTests(unittest.TestCase):
     def setUp(self):
-        self.app = create_app({"TESTING": True, "SECRET_KEY": "test-session-secret"})
+        self.app = create_app({
+            "TESTING": True,
+            "SECRET_KEY": "test-session-secret",
+            "FRONTEND_URL": "http://localhost:3000",
+        })
         self.client = self.app.test_client()
         self.client.post("/api/reset")
 
@@ -100,6 +104,34 @@ class StudySyncApiTests(unittest.TestCase):
             content_type="multipart/form-data",
         )
         self.assertEqual(response.status_code, 415)
+
+    def test_audio_upload_cors_allows_configured_frontend_preflight(self):
+        response = self.client.options(
+            "/api/notes/audio",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers["Access-Control-Allow-Origin"],
+            "http://localhost:3000",
+        )
+        self.assertEqual(response.headers["Access-Control-Allow-Methods"], "POST, OPTIONS")
+        self.assertEqual(response.headers["Access-Control-Allow-Headers"], "Content-Type")
+
+    def test_audio_upload_cors_rejects_unconfigured_origin(self):
+        response = self.client.options(
+            "/api/notes/audio",
+            headers={
+                "Origin": "https://attacker.example",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("Access-Control-Allow-Origin", response.headers)
 
     def test_weekly_plan_uses_saved_note_and_deadline(self):
         planned_date = (date.today() + timedelta(days=3)).isoformat()
@@ -247,6 +279,26 @@ class StudySyncApiTests(unittest.TestCase):
             state=None,
         )
         self.assertEqual(flow.redirect_uri, "https://api.example.test/auth/google/callback")
+
+    def test_google_callback_uses_forwarded_https_scheme(self):
+        flow = MagicMock()
+        flow.credentials = object()
+        with self.client.session_transaction() as session:
+            session["google_oauth_state"] = "test-state"
+        with patch("studysync.routes.google.oauth_flow", return_value=flow), patch(
+            "studysync.routes.google.build"
+        ) as build, patch("studysync.routes.google.store_credentials"):
+            build.return_value.userinfo.return_value.get.return_value.execute.return_value = {
+                "email": "student@example.com",
+            }
+            response = self.client.get(
+                "/auth/google/callback?state=test-state&code=test-code",
+                headers={"X-Forwarded-Proto": "https"},
+            )
+
+        self.assertEqual(response.status_code, 302, response.get_data(as_text=True))
+        authorization_response = flow.fetch_token.call_args.kwargs["authorization_response"]
+        self.assertTrue(authorization_response.startswith("https://"))
 
     def test_google_connect_rejects_invalid_oauth_client_json(self):
         with patch.dict(

@@ -106,7 +106,7 @@ BACKEND_URL=https://<railway-domain>
 NEXT_PUBLIC_BACKEND_URL=https://<railway-domain>
 ```
 
-`BACKEND_URL` configures the server-side `/api/*` proxy. `NEXT_PUBLIC_BACKEND_URL` is used by the browser only to start Google sign-in and is public, so it must contain only the backend URL and no credentials.
+`BACKEND_URL` configures the server-side `/api/*` proxy for normal API calls. `NEXT_PUBLIC_BACKEND_URL` is the public Railway URL used by the browser to start Google sign-in and upload audio directly; it must contain only the backend URL and no credentials. Direct audio upload avoids Vercel Functions' 4.5 MB request-body limit. The backend allows cross-origin audio uploads only from the origin configured in `FRONTEND_URL` (use `http://localhost:3000` for local development and the deployed frontend origin on Railway).
 
 ## Configuration and data
 
