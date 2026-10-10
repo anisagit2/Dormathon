@@ -40,7 +40,7 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
       <div
         ref={ref}
         className={cn(
-          'relative max-h-[calc(100dvh-2rem)] w-full overflow-y-auto glass-card p-6 animate-slide-in shadow-glass',
+          'relative flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden glass-card p-6 animate-slide-in shadow-glass',
           sizes[size]
         )}
       >
@@ -55,7 +55,7 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
             </button>
           </div>
         )}
-        {children}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{children}</div>
       </div>
     </div>
   )

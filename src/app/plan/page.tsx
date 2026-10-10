@@ -112,6 +112,7 @@ export default function PlanPage() {
   const [generating, setGenerating] = useState(false)
   const [recordingOpen, setRecordingOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const [meetingTitle, setMeetingTitle] = useState('')
   const [recording, setRecording] = useState<File | null>(null)
 
@@ -130,13 +131,14 @@ export default function PlanPage() {
 
   async function uploadRecording() {
     if (!meetingTitle.trim() || !recording) {
-      toast('Add a meeting title and choose an audio recording.', 'warning')
+      setUploadError('Enter a meeting title and choose an audio recording.')
       return
     }
     if (recording.size > 25 * 1024 * 1024) {
-      toast('The audio file must be 25 MB or smaller.', 'warning')
+      setUploadError('The audio file must be 25 MB or smaller.')
       return
     }
+    setUploadError('')
     setUploading(true)
     try {
       const body = new FormData()
@@ -149,7 +151,9 @@ export default function PlanPage() {
       setRecordingOpen(false)
       toast('Meeting summarized. Review the key points before generating your study plan.', 'success')
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not process the meeting recording.', 'error')
+      const message = e instanceof Error ? e.message : 'Could not process the meeting recording.'
+      setUploadError(message)
+      toast(message, 'error')
     } finally {
       setUploading(false)
     }
@@ -218,7 +222,13 @@ export default function PlanPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => setRecordingOpen(true)} className="btn-secondary">
+            <button
+              onClick={() => {
+                setUploadError('')
+                setRecordingOpen(true)
+              }}
+              className="btn-secondary"
+            >
               <Plus size={15} /> Add meeting
             </button>
             <button onClick={generate} disabled={generating} className="btn-primary">
@@ -349,52 +359,68 @@ export default function PlanPage() {
         title="Add a recorded meeting"
         size="lg"
       >
-        <div className="space-y-4">
-          <p className="text-sm leading-relaxed text-white/50">
-            OpenAI transcribes the recording and DeepSeek summarizes the lesson and identifies project or exam dates.
-            ReCap deletes the temporary audio after processing; the meeting notes are saved.
-          </p>
-          <div>
-            <label htmlFor="meeting-title" className="label-text mb-1.5 block">Meeting title</label>
-            <input
-              id="meeting-title"
-              className="input-field"
-              placeholder="e.g. Biology lecture — cell division"
-              value={meetingTitle}
-              onChange={(event) => setMeetingTitle(event.target.value)}
-              maxLength={200}
-            />
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3">
+            <p className="text-sm leading-relaxed text-white/50">
+              OpenAI transcribes the recording and DeepSeek summarizes the lesson and identifies project or exam dates.
+              ReCap deletes the temporary audio after processing; the meeting notes are saved.
+            </p>
+            <div>
+              <label htmlFor="meeting-title" className="label-text mb-1.5 block">Meeting title</label>
+              <input
+                id="meeting-title"
+                className="input-field"
+                placeholder="e.g. Biology lecture — cell division"
+                value={meetingTitle}
+                onChange={(event) => {
+                  setMeetingTitle(event.target.value)
+                  setUploadError('')
+                }}
+                maxLength={200}
+              />
+            </div>
+            <div>
+              <label htmlFor="meeting-audio" className="label-text mb-1.5 block">Audio recording</label>
+              <input
+                id="meeting-audio"
+                type="file"
+                accept=".mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm,audio/mpeg,audio/mp4,audio/wav,audio/webm"
+                className="input-field file:mr-3 file:rounded-lg file:border-0 file:bg-violet-500/20 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-violet-200"
+                onChange={(event) => {
+                  setRecording(event.target.files?.[0] ?? null)
+                  setUploadError('')
+                }}
+              />
+              <p className="mt-1.5 text-xs text-white/35">MP3, MP4, MPEG, MPGA, M4A, WAV, or WEBM · up to 25 MB</p>
+            </div>
+            {recording && <p className="text-xs text-white/50">Selected: {recording.name}</p>}
           </div>
-          <div>
-            <label htmlFor="meeting-audio" className="label-text mb-1.5 block">Audio recording</label>
-            <input
-              id="meeting-audio"
-              type="file"
-              accept=".mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm,audio/mpeg,audio/mp4,audio/wav,audio/webm"
-              className="input-field file:mr-3 file:rounded-lg file:border-0 file:bg-violet-500/20 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-violet-200"
-              onChange={(event) => setRecording(event.target.files?.[0] ?? null)}
-            />
-            <p className="mt-1.5 text-xs text-white/35">MP3, MP4, MPEG, MPGA, M4A, WAV, or WEBM · up to 25 MB</p>
-          </div>
-          {recording && <p className="text-xs text-white/50">Selected: {recording.name}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => { setRecordingOpen(false); setMeetingTitle(''); setRecording(null) }}
-              disabled={uploading}
-              className="btn-secondary"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={uploadRecording}
-              disabled={uploading}
-              className="btn-primary"
-            >
-              {uploading ? <Spinner size="sm" /> : <UploadCloud size={14} />}
-              {uploading ? 'Summarizing…' : 'Summarize meeting'}
-            </button>
+          <div className="shrink-0 space-y-2 border-t border-white/[0.08] pt-3">
+            {uploadError && <p role="alert" className="text-xs text-rose-300">{uploadError}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setRecordingOpen(false)
+                  setMeetingTitle('')
+                  setRecording(null)
+                  setUploadError('')
+                }}
+                disabled={uploading}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={uploadRecording}
+                disabled={uploading}
+                className="btn-primary"
+              >
+                {uploading ? <Spinner size="sm" /> : <UploadCloud size={14} />}
+                {uploading ? 'Summarizing…' : 'Summarize meeting'}
+              </button>
+            </div>
           </div>
         </div>
       </Modal>
