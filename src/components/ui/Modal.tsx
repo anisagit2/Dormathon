@@ -40,7 +40,7 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
       <div
         ref={ref}
         className={cn(
-          'relative w-full glass-card p-6 animate-slide-in shadow-glass',
+          'relative max-h-[calc(100dvh-2rem)] w-full overflow-y-auto glass-card p-6 animate-slide-in shadow-glass',
           sizes[size]
         )}
       >
