@@ -12,7 +12,9 @@ from google.genai.errors import APIError
 
 from studysync import db as store
 from studysync.integrations.gmail import read_messages
-from studysync.integrations.hive import analyze_transcript, transcribe_audio
+from studysync.integrations.audio import analyze_audio
+from studysync.integrations.hive import analyze_transcript
+from studysync.integrations.openai_audio import transcribe_audio
 
 TEST_DATA = tempfile.TemporaryDirectory(prefix="studysync-tests-")
 os.environ["STUDYSYNC_DB_PATH"] = str(Path(TEST_DATA.name) / "test.sqlite3")
@@ -56,26 +58,25 @@ class StudySyncApiTests(unittest.TestCase):
         with self.assertRaisesRegex(ProviderError, "usage quota is exhausted"):
             _generate_json(client, "prompt", "email extraction")
 
-    def test_hive_transcribes_audio_with_project_api(self):
-        response = MagicMock(ok=True)
-        response.json.return_value = {
-            "status": {
-                "response": {
-                    "output": [{"transcript": "The biology project is due Friday."}],
-                },
-            },
-        }
+    def test_openai_transcribes_audio_with_configured_model(self):
+        client = MagicMock()
+        client.audio.transcriptions.create.return_value.text = "The biology project is due Friday."
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
-            os.environ, {"HIVE_SPEECH_API_KEY": "test-speech-key"}
-        ), patch("studysync.integrations.hive.requests.post", return_value=response) as post:
+            os.environ,
+            {
+                "OPENAI_API_KEY": "test-openai-key",
+                "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-mini-transcribe",
+            },
+        ), patch("studysync.integrations.openai_audio.OpenAI", return_value=client) as openai_client:
             audio_path = Path(temp_dir) / "recording.wav"
             audio_path.write_bytes(b"audio bytes")
             transcript = transcribe_audio(str(audio_path))
 
         self.assertEqual(transcript, "The biology project is due Friday.")
-        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "token test-speech-key")
-        self.assertIn("media", post.call_args.kwargs["files"])
-        self.assertEqual(post.call_args.kwargs["timeout"], (15, 240))
+        openai_client.assert_called_once_with(api_key="test-openai-key", timeout=300)
+        call_kwargs = client.audio.transcriptions.create.call_args.kwargs
+        self.assertEqual(call_kwargs["model"], "gpt-4o-mini-transcribe")
+        self.assertTrue(call_kwargs["file"].closed)
 
     def test_hive_deepseek_parses_streamed_json_and_preserves_transcript(self):
         transcript = "Lecture transcript with a project deadline on October 20."
@@ -105,12 +106,26 @@ class StudySyncApiTests(unittest.TestCase):
         )
         self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer test-llm-key")
 
-    def test_hive_audio_providers_require_separate_private_keys(self):
-        with patch.dict(os.environ, {"HIVE_SPEECH_API_KEY": "", "HIVE_LLM_API_KEY": ""}):
-            with self.assertRaisesRegex(ProviderError, "HIVE_SPEECH_API_KEY"):
+    def test_audio_provider_keys_are_required_separately(self):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "", "HIVE_LLM_API_KEY": ""}):
+            with self.assertRaisesRegex(ProviderError, "OPENAI_API_KEY"):
                 transcribe_audio("recording.wav")
             with self.assertRaisesRegex(ProviderError, "HIVE_LLM_API_KEY"):
                 analyze_transcript("transcript", "Lecture")
+
+    def test_audio_analysis_transcribes_with_openai_then_summarizes_with_hive(self):
+        with patch(
+            "studysync.integrations.audio.transcribe_audio",
+            return_value="The project is due next Friday.",
+        ) as transcribe, patch(
+            "studysync.integrations.audio.analyze_transcript",
+            return_value={"summary": "Project deadline next Friday.", "transcript": "ignored"},
+        ) as summarize:
+            result = analyze_audio("lecture.mp3", "Biology lecture")
+
+        transcribe.assert_called_once_with("lecture.mp3")
+        summarize.assert_called_once_with("The project is due next Friday.", "Biology lecture")
+        self.assertEqual(result["summary"], "Project deadline next Friday.")
 
     def test_audio_upload_saves_summary_and_deletes_temporary_audio(self):
         seen_paths = []

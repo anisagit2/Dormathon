@@ -351,7 +351,7 @@ export default function PlanPage() {
       >
         <div className="space-y-4">
           <p className="text-sm leading-relaxed text-white/50">
-            Hive transcribes the recording and DeepSeek summarizes the lesson and identifies project or exam dates.
+            OpenAI transcribes the recording and DeepSeek summarizes the lesson and identifies project or exam dates.
             ReCap deletes the temporary audio after processing; the meeting notes are saved.
           </p>
           <div>
@@ -370,11 +370,11 @@ export default function PlanPage() {
             <input
               id="meeting-audio"
               type="file"
-              accept=".mp3,.wav,.m4a,.ogg,.flac,audio/mpeg,audio/wav,audio/mp4,audio/ogg,audio/flac"
+              accept=".mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm,audio/mpeg,audio/mp4,audio/wav,audio/webm"
               className="input-field file:mr-3 file:rounded-lg file:border-0 file:bg-violet-500/20 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-violet-200"
               onChange={(event) => setRecording(event.target.files?.[0] ?? null)}
             />
-            <p className="mt-1.5 text-xs text-white/35">MP3, WAV, M4A, OGG, or FLAC · up to 25 MB</p>
+            <p className="mt-1.5 text-xs text-white/35">MP3, MP4, MPEG, MPGA, M4A, WAV, or WEBM · up to 25 MB</p>
           </div>
           {recording && <p className="text-xs text-white/50">Selected: {recording.name}</p>}
           <div className="flex justify-end gap-2 pt-1">
