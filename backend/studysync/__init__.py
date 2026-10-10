@@ -1,0 +1,1 @@
+"""StudySync local backend package."""

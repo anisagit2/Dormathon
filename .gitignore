@@ -1,0 +1,35 @@
+# Local credentials and user data
+.env
+.env.*
+!.env.example
+credentials*.json
+client_secret*.json
+token*.json
+backend/data/
+.tokens/
+uploads/
+*.sqlite
+*.sqlite3
+*.db
+
+# Node and Next.js output
+node_modules/
+.next/
+out/
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# Logs and operating-system files
+*.log
+.DS_Store
+Thumbs.db
