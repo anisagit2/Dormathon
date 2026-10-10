@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import unittest
@@ -212,11 +213,49 @@ class StudySyncApiTests(unittest.TestCase):
     def test_google_connect_reports_missing_local_oauth_configuration(self):
         with patch.dict(
             os.environ,
-            {"GOOGLE_OAUTH_CLIENT_SECRETS_FILE": str(Path(TEST_DATA.name) / "missing-credentials.json")},
+            {
+                "GOOGLE_OAUTH_CLIENT_SECRETS_JSON": "",
+                "GOOGLE_OAUTH_CLIENT_SECRETS_FILE": str(Path(TEST_DATA.name) / "missing-credentials.json"),
+            },
         ):
             response = self.client.get("/auth/google/start")
         self.assertEqual(response.status_code, 503)
-        self.assertIn("OAuth credentials file was not found", response.json["error"])
+        self.assertIn("Google OAuth credentials were not found", response.json["error"])
+
+    def test_google_connect_accepts_oauth_client_json_from_environment(self):
+        client_config = {"web": {"client_id": "test-client", "client_secret": "test-secret"}}
+        with patch.dict(
+            os.environ,
+            {
+                "GOOGLE_OAUTH_CLIENT_SECRETS_JSON": json.dumps(client_config),
+                "GOOGLE_OAUTH_REDIRECT_URI": "https://api.example.test/auth/google/callback",
+            },
+        ), patch("studysync.integrations.google_auth.Flow.from_client_config") as from_client_config:
+            flow = from_client_config.return_value
+            flow.authorization_url.return_value = ("https://accounts.google.test/authorize", "test-state")
+            response = self.client.get("/auth/google/start")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "https://accounts.google.test/authorize")
+        from_client_config.assert_called_once_with(
+            client_config,
+            scopes=[
+                "openid",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/gmail.readonly",
+            ],
+            state=None,
+        )
+        self.assertEqual(flow.redirect_uri, "https://api.example.test/auth/google/callback")
+
+    def test_google_connect_rejects_invalid_oauth_client_json(self):
+        with patch.dict(
+            os.environ,
+            {"GOOGLE_OAUTH_CLIENT_SECRETS_JSON": '{"web":'},
+        ):
+            response = self.client.get("/auth/google/start")
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("must contain valid JSON", response.json["error"])
 
 
 if __name__ == "__main__":

@@ -28,15 +28,34 @@ def _fernet():
 
 
 def oauth_flow(state=None):
-    secret_file = os.getenv("GOOGLE_OAUTH_CLIENT_SECRETS_FILE", "credentials.json")
-    if not os.path.isabs(secret_file):
-        secret_file = BACKEND_DIR / secret_file
-    if not os.path.isfile(secret_file):
-        raise ProviderError("Google OAuth credentials file was not found in the backend folder.")
+    client_config_json = os.getenv("GOOGLE_OAUTH_CLIENT_SECRETS_JSON", "").strip()
+    if client_config_json:
+        try:
+            client_config = json.loads(client_config_json)
+        except json.JSONDecodeError as error:
+            raise ProviderError("GOOGLE_OAUTH_CLIENT_SECRETS_JSON must contain valid JSON.") from error
+        if not isinstance(client_config, dict) or not any(
+            isinstance(client_config.get(client_type), dict)
+            for client_type in ("web", "installed")
+        ):
+            raise ProviderError(
+                "GOOGLE_OAUTH_CLIENT_SECRETS_JSON must contain a Google web or installed client configuration."
+            )
+        flow = Flow.from_client_config(client_config, scopes=GOOGLE_SCOPES, state=state)
+    else:
+        secret_file = os.getenv("GOOGLE_OAUTH_CLIENT_SECRETS_FILE", "credentials.json")
+        if not os.path.isabs(secret_file):
+            secret_file = BACKEND_DIR / secret_file
+        if not os.path.isfile(secret_file):
+            raise ProviderError(
+                "Google OAuth credentials were not found. Set GOOGLE_OAUTH_CLIENT_SECRETS_JSON "
+                "or provide credentials.json in the backend folder."
+            )
+        flow = Flow.from_client_secrets_file(secret_file, scopes=GOOGLE_SCOPES, state=state)
+
     redirect_uri = os.getenv(
         "GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:8000/auth/google/callback"
     )
-    flow = Flow.from_client_secrets_file(secret_file, scopes=GOOGLE_SCOPES, state=state)
     flow.redirect_uri = redirect_uri
     return flow
 

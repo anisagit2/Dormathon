@@ -27,7 +27,7 @@ In the [Google Cloud Console](https://console.cloud.google.com/):
 2. Configure the OAuth consent screen. For local testing, add your Google account as a test user if the app is in Testing mode.
 3. Create an OAuth client ID with application type **Web application**.
 4. Add this exact authorized redirect URI: `http://localhost:8000/auth/google/callback`.
-5. Download the OAuth client JSON file. Save it as `backend/credentials.json`.
+5. Download the OAuth client JSON file. For local development, save it as `backend/credentials.json`. For a hosted backend, set the full JSON content as the private `GOOGLE_OAUTH_CLIENT_SECRETS_JSON` environment variable instead; never commit or expose the credentials.
 
 The app requests Google sign-in identity and the read-only `gmail.readonly` permission. It does not send, edit, or delete Gmail messages.
 
@@ -87,10 +87,31 @@ On Alerts, choose **Connect Gmail** and approve read-only access. Press **Sync G
 
 The **Calendar** page automatically displays dated class updates, deadlines, exams, and occasions extracted from Gmail alerts or meeting notes. Date-only items appear as all-day events. This calendar is stored in ReCap and does not create or modify Google Calendar events.
 
+## Deploying the backend to Railway
+
+The backend can be deployed as a separate Railway service from the `backend` directory. It uses Gunicorn in production and expects Railway's `PORT` variable.
+
+1. Deploy the contents of `backend/` as the service root.
+2. Add a Railway persistent volume mounted at `/data`, then set `STUDYSYNC_DB_PATH=/data/studysync.sqlite3` so SQLite data survives redeploys.
+3. Set private service variables: `APP_SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-2.5-flash`, `GOOGLE_OAUTH_CLIENT_SECRETS_JSON`, `GOOGLE_OAUTH_REDIRECT_URI`, `FRONTEND_URL`, and `STUDYSYNC_DB_PATH`.
+4. Set `GOOGLE_OAUTH_REDIRECT_URI` to `https://<railway-domain>/auth/google/callback` and add that exact URL to the Google OAuth client's authorized redirect URIs. Set `FRONTEND_URL` to the deployed frontend URL.
+5. Keep OAuth JSON and all keys in Railway's private variables; do not commit them or expose them as `NEXT_PUBLIC_*` variables.
+
+Meeting recordings are temporary and deleted after analysis. This single-user deployment setup does not provide separate accounts or isolate data between multiple students.
+
+For the Vercel frontend, set these project environment variables to the Railway public service URL (without a trailing slash), then redeploy:
+
+```env
+BACKEND_URL=https://<railway-domain>
+NEXT_PUBLIC_BACKEND_URL=https://<railway-domain>
+```
+
+`BACKEND_URL` configures the server-side `/api/*` proxy. `NEXT_PUBLIC_BACKEND_URL` is used by the browser only to start Google sign-in and is public, so it must contain only the backend URL and no credentials.
+
 ## Configuration and data
 
 - Backend environment variables: `backend/.env` (copy from `.env.example`).
-- Google OAuth client JSON: `backend/credentials.json`.
+- Google OAuth client JSON: local `backend/credentials.json`, or the private `GOOGLE_OAUTH_CLIENT_SECRETS_JSON` environment variable on a hosted backend.
 - Local SQLite database: `backend/data/studysync.sqlite3`.
 - The backend listens on `http://localhost:8000`; Next.js proxies `/api/*` there.
 - To use a different local frontend URL, update `FRONTEND_URL` and the Google OAuth redirect configuration as appropriate.
