@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from cryptography.fernet import Fernet
+from google.genai.errors import APIError
 
 from studysync import db as store
 from studysync.integrations.gmail import read_messages
@@ -43,6 +44,16 @@ class StudySyncApiTests(unittest.TestCase):
         response = self.client.patch("/api/settings", json={"max_study_min_per_day": 5})
         self.assertEqual(response.status_code, 400)
         self.assertIn("between 30 and 720", response.json["error"])
+
+    def test_gemini_quota_error_is_converted_to_actionable_provider_error(self):
+        client = MagicMock()
+        client.models.generate_content.side_effect = APIError(
+            429, {"error": {"message": "free-tier quota exceeded"}}
+        )
+        from studysync.integrations.gemini import _generate_json
+
+        with self.assertRaisesRegex(ProviderError, "usage quota is exhausted"):
+            _generate_json(client, "prompt", "email extraction")
 
     def test_audio_upload_saves_summary_and_deletes_temporary_audio(self):
         seen_paths = []
@@ -97,6 +108,21 @@ class StudySyncApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertIn("Gemini request failed", response.json["error"])
         self.assertFalse(os.path.exists(seen_paths[0]))
+
+    def test_audio_upload_reports_gemini_quota_exhaustion(self):
+        with patch(
+            "studysync.routes.notes.analyze_audio",
+            side_effect=ProviderError(
+                "Gemini's usage quota is exhausted for the configured model."
+            ),
+        ):
+            response = self.client.post(
+                "/api/notes/audio",
+                data={"title": "Lecture", "audio": (BytesIO(b"recording"), "lecture.mp3")},
+                content_type="multipart/form-data",
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("usage quota is exhausted", response.json["error"])
 
     def test_audio_upload_rejects_unsupported_file_types(self):
         response = self.client.post(

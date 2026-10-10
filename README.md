@@ -97,7 +97,7 @@ The backend can be deployed as a separate Railway service from the `backend` dir
 4. Set `GOOGLE_OAUTH_REDIRECT_URI` to `https://<railway-domain>/auth/google/callback` and add that exact URL to the Google OAuth client's authorized redirect URIs. Set `FRONTEND_URL` to the deployed frontend URL.
 5. Keep OAuth JSON and all keys in Railway's private variables; do not commit them or expose them as `NEXT_PUBLIC_*` variables.
 
-Meeting recordings are temporary and deleted after analysis. Gmail sync checks up to 100 messages from the configured lookback period (30 days by default). Set optional Railway variable `GMAIL_SEARCH_QUERY` to Gmail search terms/operators to narrow which matching messages ReCap analyzes, for example `{quiz exam assignment deadline project "room change"}`. ReCap adds the configured lookback filter automatically. This single-user deployment setup does not provide separate accounts or isolate data between multiple students.
+Meeting recordings are temporary and deleted after analysis. Audio analysis and Gmail extraction both use the configured Gemini API model and count against its API quota. Gmail sync checks up to 100 messages from the configured lookback period (30 days by default). Set optional Railway variable `GMAIL_SEARCH_QUERY` to Gmail search terms/operators to narrow which matching messages ReCap analyzes, for example `{quiz exam assignment deadline project "room change"}`. ReCap adds the configured lookback filter automatically. This single-user deployment setup does not provide separate accounts or isolate data between multiple students.
 
 For the Vercel frontend, set these project environment variables to the Railway public service URL (without a trailing slash), then redeploy:
 
