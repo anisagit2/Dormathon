@@ -5,7 +5,7 @@ import {
   Circle, Clock, Calendar, Plus, UploadCloud, Sparkles,
 } from 'lucide-react'
 import api from '@/lib/api'
-import { Note, StudyPlan, StudySession, SessionStatus } from '@/types'
+import { Alert, Note, StudyPlan, StudySession, SessionStatus } from '@/types'
 import { formatDate, formatRelative, phaseLabel, phaseColor, cn } from '@/lib/utils'
 import AppShell from '@/components/layout/AppShell'
 import Topbar from '@/components/layout/Topbar'
@@ -108,6 +108,7 @@ export default function PlanPage() {
   const { toast } = useToast()
   const [plan, setPlan] = useState<StudyPlan | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
+  const [alerts, setAlerts] = useState<Alert[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [recordingOpen, setRecordingOpen] = useState(false)
@@ -119,9 +120,14 @@ export default function PlanPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [p, noteResponse] = await Promise.all([api.plan(), api.notes(1, 10)])
+      const [p, noteResponse, alertResponse] = await Promise.all([
+        api.plan(),
+        api.notes(1, 10),
+        api.alerts(),
+      ])
       setPlan(p)
       setNotes(noteResponse.notes)
+      setAlerts(alertResponse.alerts)
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Failed to load plan', 'error')
     } finally {
@@ -203,6 +209,17 @@ export default function PlanPage() {
 
   const grouped = plan ? groupByDate(plan.sessions) : new Map<string, StudySession[]>()
   const today = new Date().toISOString().slice(0, 10)
+  const planEnd = new Date(`${today}T00:00:00Z`)
+  planEnd.setUTCDate(planEnd.getUTCDate() + (plan?.horizon_days ?? 7) - 1)
+  const planEndDate = planEnd.toISOString().slice(0, 10)
+  const studyReminders = alerts
+    .filter(
+      (alert) =>
+        ['exam', 'assignment', 'deadline'].includes(alert.category ?? '') &&
+        (!alert.date || (alert.date >= today && alert.date <= planEndDate)),
+    )
+    .sort((a, b) => (a.date ?? '9999-12-31').localeCompare(b.date ?? '9999-12-31'))
+  const visibleStudyReminders = studyReminders.slice(0, 8)
   const doneSessions = plan?.sessions.filter((s) => s.status === 'done').length ?? 0
   const totalMin = plan?.total_study_minutes ?? 0
 
@@ -237,6 +254,65 @@ export default function PlanPage() {
             </button>
           </div>
         </div>
+
+        <section className="glass-card p-4 sm:p-5" aria-labelledby="study-reminders-heading">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 id="study-reminders-heading" className="text-sm font-semibold text-white/80">
+                Study goals from reminders
+              </h3>
+              <p className="mt-1 text-xs text-white/40">
+                Upcoming exam, assignment, and deadline alerts are used to schedule review and practice sessions.
+              </p>
+            </div>
+            <a href="/alerts" className="text-xs font-medium text-violet-300 hover:text-violet-200">
+              Sync or review alerts
+            </a>
+          </div>
+          {visibleStudyReminders.length > 0 ? (
+            <ul className="mt-3 divide-y divide-white/[0.06]">
+              {visibleStudyReminders.map((alert) => {
+                const sessionsForAlert =
+                  plan?.sessions.filter((session) => session.title.endsWith(alert.title)) ?? []
+                return (
+                  <li key={alert.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-white/75">{alert.title}</p>
+                      <p className="mt-0.5 text-xs text-white/35">
+                        {alert.date ? formatDate(alert.date) : 'Date not specified'}
+                        {alert.source_type === 'email' ? ' · Gmail' : alert.source_type === 'note' ? ' · Meeting note' : ''}
+                      </p>
+                    </div>
+                    <span className="text-xs text-white/45">
+                      {!plan
+                        ? 'Generate a plan'
+                        : sessionsForAlert.length > 0
+                          ? `${sessionsForAlert.length} study ${sessionsForAlert.length === 1 ? 'session' : 'sessions'}`
+                          : 'No time slot available'}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="mt-3 text-xs text-white/40">
+              No upcoming study reminders found. Sync Gmail on Alerts, or add a meeting with exam and due-date details.
+            </p>
+          )}
+          {studyReminders.length > visibleStudyReminders.length && (
+            <p className="mt-2 text-xs text-white/35">
+              Showing {visibleStudyReminders.length} of {studyReminders.length} reminders in this plan window.
+            </p>
+          )}
+          {plan && visibleStudyReminders.some((alert) => {
+            const planned = plan.sessions.some((session) => session.title.endsWith(alert.title))
+            return !planned
+          }) && (
+            <p className="mt-2 text-xs text-amber-200/70">
+              Some reminders could not fit your current study windows. Adjust them in Settings, then generate the plan again.
+            </p>
+          )}
+        </section>
 
         {notes.length > 0 && (
           <section className="space-y-3" aria-labelledby="meeting-notes-heading">

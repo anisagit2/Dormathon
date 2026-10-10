@@ -289,6 +289,40 @@ class StudySyncApiTests(unittest.TestCase):
         self.assertGreaterEqual(plan["total_sessions"], 1)
         self.assertTrue(any("Calculus exam" in item["title"] for item in plan["sessions"]))
 
+    def test_weekly_plan_schedules_study_sessions_from_gmail_exam_alerts(self):
+        exam_date = (date.today() + timedelta(days=4)).isoformat()
+        with store.connect() as db:
+            db.execute(
+                "INSERT INTO items (id, source_type, source_id, type, title, description, date, confidence, "
+                "status, created_at) VALUES (?, 'email', ?, 'exam', ?, '', ?, 0.95, 'pending', ?)",
+                ("exam-item", "email-message", "Chemistry midterm", exam_date, date.today().isoformat()),
+            )
+            db.execute(
+                "INSERT INTO alerts (id, title, message, severity, is_read, created_at, related_item_id, "
+                "source_type, source_id) VALUES (?, ?, ?, 'warning', 0, ?, ?, 'email', ?)",
+                (
+                    "exam-alert",
+                    "Chemistry midterm",
+                    f"Exam on {exam_date}",
+                    date.today().isoformat(),
+                    "exam-item",
+                    "email-message",
+                ),
+            )
+
+        settings = self.client.get("/api/settings").json
+        settings["plan_horizon_days"] = 7
+        settings["study_windows"] = {
+            str(day): {"start": "09:00", "end": "18:00"} for day in range(7)
+        }
+        self.client.patch("/api/settings", json=settings)
+        plan_response = self.client.post("/api/plan/generate", json={})
+
+        self.assertEqual(plan_response.status_code, 201, plan_response.json)
+        titles = [session["title"] for session in plan_response.json["sessions"]]
+        self.assertIn("Review for: Chemistry midterm", titles)
+        self.assertIn("Practice for: Chemistry midterm", titles)
+
     def test_gmail_sync_reports_missing_connection(self):
         response = self.client.post("/api/sync")
         self.assertEqual(response.status_code, 503)

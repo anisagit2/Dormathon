@@ -83,7 +83,7 @@ Open [http://localhost:3000](http://localhost:3000). Keep both terminal processe
 
 On the Study Plan page, choose **Add meeting**, select an MP3, MP4, MPEG, MPGA, M4A, WAV, or WEBM audio file (up to 25 MB), and submit it. OpenAI transcribes the recording and DeepSeek analyzes the transcript. ReCap saves the resulting transcript/summary and extracted dates, then removes the temporary audio file. Review the summary, then choose **Generate study plan** when ready.
 
-On Alerts, choose **Connect Gmail** and approve read-only access. Press **Sync Gmail** whenever you want to check for new messages. Alerts only use details found in synced emails or saved meeting notes; ambiguous dates are not invented.
+On Alerts, choose **Connect Gmail** and approve read-only access. Press **Sync Gmail** whenever you want to check for new messages. Generate or regenerate the weekly plan after syncing: dated exam, assignment, and deadline reminders from Gmail and meeting notes are turned into study, review, and practice sessions within your configured study windows. The Study Plan page shows which reminders are included and flags any that could not fit. Alerts only use details found in synced emails or saved meeting notes; ambiguous dates are not invented.
 
 The **Calendar** page automatically displays dated class updates, deadlines, exams, and occasions extracted from Gmail alerts or meeting notes. Date-only items appear as all-day events. This calendar is stored in ReCap and does not create or modify Google Calendar events.
 
