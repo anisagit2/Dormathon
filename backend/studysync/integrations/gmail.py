@@ -1,4 +1,5 @@
 import base64
+import os
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
@@ -52,8 +53,12 @@ def _decode_body(payload):
 
 def read_messages(db, lookback_days):
     service = get_service(db)
+    keyword_query = os.getenv("GMAIL_SEARCH_QUERY", "").strip()
+    search_query = f"newer_than:{max(1, int(lookback_days))}d"
+    if keyword_query:
+        search_query = f"{search_query} {keyword_query}"
     result = service.users().messages().list(
-        userId="me", q=f"newer_than:{max(1, int(lookback_days))}d", maxResults=100
+        userId="me", q=search_query, maxResults=100
     ).execute()
     output = []
     for message in result.get("messages", []):

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 from cryptography.fernet import Fernet
 
 from studysync import db as store
+from studysync.integrations.gmail import read_messages
 
 TEST_DATA = tempfile.TemporaryDirectory(prefix="studysync-tests-")
 os.environ["STUDYSYNC_DB_PATH"] = str(Path(TEST_DATA.name) / "test.sqlite3")
@@ -168,6 +169,23 @@ class StudySyncApiTests(unittest.TestCase):
         response = self.client.post("/api/sync")
         self.assertEqual(response.status_code, 503)
         self.assertIn("Connect a Google account", response.json["error"])
+
+    def test_gmail_search_query_narrows_messages_with_configured_keywords(self):
+        service = MagicMock()
+        service.users.return_value.messages.return_value.list.return_value.execute.return_value = {
+            "messages": [],
+        }
+        with patch.dict(os.environ, {"GMAIL_SEARCH_QUERY": '{quiz exam "room change"}'}), patch(
+            "studysync.integrations.gmail.get_service", return_value=service
+        ):
+            with store.connect() as db:
+                self.assertEqual(read_messages(db, 30), [])
+
+        service.users.return_value.messages.return_value.list.assert_called_once_with(
+            userId="me",
+            q='newer_than:30d {quiz exam "room change"}',
+            maxResults=100,
+        )
 
     def test_manual_gmail_sync_creates_source_linked_alerts(self):
         message = {

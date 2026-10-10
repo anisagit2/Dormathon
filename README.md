@@ -93,11 +93,11 @@ The backend can be deployed as a separate Railway service from the `backend` dir
 
 1. Deploy the contents of `backend/` as the service root.
 2. Add a Railway persistent volume mounted at `/data`, then set `STUDYSYNC_DB_PATH=/data/studysync.sqlite3` so SQLite data survives redeploys.
-3. Set private service variables: `APP_SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-2.5-flash`, `GOOGLE_OAUTH_CLIENT_SECRETS_JSON`, `GOOGLE_OAUTH_REDIRECT_URI`, `FRONTEND_URL`, and `STUDYSYNC_DB_PATH`.
+3. Set private service variables: `APP_SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GMAIL_SEARCH_QUERY` (optional Gmail search terms/operators), `GOOGLE_OAUTH_CLIENT_SECRETS_JSON`, `GOOGLE_OAUTH_REDIRECT_URI`, `FRONTEND_URL`, and `STUDYSYNC_DB_PATH`.
 4. Set `GOOGLE_OAUTH_REDIRECT_URI` to `https://<railway-domain>/auth/google/callback` and add that exact URL to the Google OAuth client's authorized redirect URIs. Set `FRONTEND_URL` to the deployed frontend URL.
 5. Keep OAuth JSON and all keys in Railway's private variables; do not commit them or expose them as `NEXT_PUBLIC_*` variables.
 
-Meeting recordings are temporary and deleted after analysis. This single-user deployment setup does not provide separate accounts or isolate data between multiple students.
+Meeting recordings are temporary and deleted after analysis. Gmail sync checks up to 100 messages from the configured lookback period (30 days by default). Set optional Railway variable `GMAIL_SEARCH_QUERY` to Gmail search terms/operators to narrow which matching messages ReCap analyzes, for example `{quiz exam assignment deadline project "room change"}`. ReCap adds the configured lookback filter automatically. This single-user deployment setup does not provide separate accounts or isolate data between multiple students.
 
 For the Vercel frontend, set these project environment variables to the Railway public service URL (without a trailing slash), then redeploy:
 
